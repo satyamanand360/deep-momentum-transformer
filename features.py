@@ -8,10 +8,21 @@ def compute_macd(close, short_window, long_window):
     ewm_long = close.ewm(span=long_window, adjust=False).mean()
     return ewm_short - ewm_long
 
-def compute_features(df):
+FEATURE_COLS = [
+    'Return_1d_scaled', 'Return_21d_scaled', 'Return_63d_scaled',
+    'Return_126d_scaled', 'Return_252d_scaled',
+    'MACD_8_24_scaled', 'MACD_16_28_scaled', 'MACD_32_96_scaled'
+]
+
+def compute_features(df, keep_unlabeled=False):
     """
     Computes momentum features for each ticker.
     df is expected to have ['Date', 'Ticker', 'Close', 'Open', 'High', 'Low', 'Volume']
+
+    keep_unlabeled=False (training/backtest): drop every row with a NaN, including
+        each ticker's last row, whose next-day return is not known yet.
+    keep_unlabeled=True (live trading): keep rows whose features are complete even
+        if Target_Return is NaN, so the most recent day can still be traded.
     """
     df = df.copy()
     df['Date'] = pd.to_datetime(df['Date'])
@@ -64,7 +75,10 @@ def compute_features(df):
         
     final_df = pd.concat(processed_dfs, ignore_index=True)
     # Drop rows where we don't have enough history for the 252d return or vol
-    final_df = final_df.dropna().reset_index(drop=True)
+    if keep_unlabeled:
+        final_df = final_df.dropna(subset=FEATURE_COLS + ['Vol_60d']).reset_index(drop=True)
+    else:
+        final_df = final_df.dropna().reset_index(drop=True)
     return final_df
 
 if __name__ == "__main__":

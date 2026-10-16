@@ -38,7 +38,7 @@ st.markdown("Advanced Deep Momentum Network with Attention (Decoder-Only TFT).")
 # ── Sidebar Controls ─────────────────────────────────────────────────────────
 st.sidebar.header("⚙️ Settings")
 
-mode = st.sidebar.radio("Data Source", ["Historical Backtest (2020-2024)", "Live Inference (2023-Present)"])
+mode = st.sidebar.radio("Data Source", ["Historical Backtest (2020-2023)", "Live Inference (2024-Present)"])
 
 @st.cache_data
 def load_data(mode_name):
@@ -46,13 +46,15 @@ def load_data(mode_name):
         port_file = "results/live_portfolio_returns.csv"
         bench_file = "results/live_benchmark_returns.csv"
         pos_file = "results/live_positions.csv"
+        tsmom_file = None
     else:
         port_file = "results/portfolio_returns.csv"
         bench_file = "results/benchmark_returns.csv"
         pos_file = None
+        tsmom_file = "results/tsmom_returns.csv"
 
     if not os.path.exists(port_file) or not os.path.exists(bench_file):
-        return None, None, None
+        return None, None, None, None
 
     port = pd.read_csv(port_file, index_col=0)
     bench = pd.read_csv(bench_file, index_col=0)
@@ -63,9 +65,15 @@ def load_data(mode_name):
     if pos_file and os.path.exists(pos_file):
         pos_df = pd.read_csv(pos_file)
 
-    return port.iloc[:, 0], bench.iloc[:, 0], pos_df
+    tsmom = None
+    if tsmom_file and os.path.exists(tsmom_file):
+        tsmom = pd.read_csv(tsmom_file, index_col=0)
+        tsmom.index = pd.to_datetime(tsmom.index)
+        tsmom = tsmom.iloc[:, 0]
 
-port_ret_full, bench_ret_full, pos_df = load_data(mode)
+    return port.iloc[:, 0], bench.iloc[:, 0], pos_df, tsmom
+
+port_ret_full, bench_ret_full, pos_df, tsmom_ret_full = load_data(mode)
 
 if port_ret_full is None:
     st.error(f"Could not find results for {mode}. Please run the corresponding script first.")
@@ -97,7 +105,7 @@ def calc_all_metrics(strat, bench):
     s_ret = strat.mean() * ann
     s_vol = strat.std() * np.sqrt(ann)
     s_sharpe = s_ret / (s_vol + 1e-8)
-    s_down = strat[strat < 0].std() * np.sqrt(ann)
+    s_down = np.sqrt(np.mean(np.minimum(strat.values, 0.0) ** 2)) * np.sqrt(ann)  # downside deviation (same as backtest)
     s_sortino = s_ret / (s_down + 1e-8)
     s_cum = (1 + strat).cumprod()
     s_dd = ((s_cum - s_cum.cummax()) / s_cum.cummax()).min()
@@ -184,7 +192,11 @@ with t1:
     b_cum = (1 + bench_ret).cumprod()
     fig_eq = go.Figure()
     fig_eq.add_trace(go.Scatter(x=s_cum.index, y=s_cum, mode='lines', name='Momentum Transformer (30% Target)', line=dict(color='#00C49A', width=2)))
-    fig_eq.add_trace(go.Scatter(x=b_cum.index, y=b_cum, mode='lines', name='Benchmark (Equal Weight)', line=dict(color='#FF6B6B', width=2, dash='dash')))
+    fig_eq.add_trace(go.Scatter(x=b_cum.index, y=b_cum, mode='lines', name='Benchmark (Equal Weight, unlevered)', line=dict(color='#FF6B6B', width=2, dash='dash')))
+    if tsmom_ret_full is not None:
+        t_ret = tsmom_ret_full.loc[(tsmom_ret_full.index >= port_ret.index.min()) & (tsmom_ret_full.index <= port_ret.index.max())]
+        t_cum = (1 + t_ret).cumprod()
+        fig_eq.add_trace(go.Scatter(x=t_cum.index, y=t_cum, mode='lines', name='TSMOM baseline (30% Target)', line=dict(color='#F2B451', width=1.5, dash='dot')))
     fig_eq.update_layout(height=500, title="Cumulative Equity Curve", template="plotly_dark", hovermode="x unified", legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
     st.plotly_chart(fig_eq, use_container_width=True)
 
@@ -250,12 +262,18 @@ if "Live" in mode and pos_df is not None:
         
     pos_show = pos_df.copy()
     pos_show['Direction'] = pos_show['z'].apply(label_dir)
-    pos_show = pos_show.sort_values('z', ascending=False)[['Ticker', 'Direction', 'z', 'scaled_z']]
-    pos_show.columns = ['Ticker', 'Direction', 'Raw Signal (z)', 'Target Weight (%)']
-    pos_show['Target Weight (%)'] = pos_show['Target Weight (%)'] * 100
-    
+    if 'portfolio_weight' not in pos_show.columns:   # files written by older versions
+        pos_show['portfolio_weight'] = np.nan
+    if 'Date' in pos_show.columns:
+        st.caption(f"Signal from the {pd.to_datetime(pos_show['Date']).max().date()} close. "
+                   "Portfolio weight = vol-targeted position x portfolio leverage / number of assets.")
+    pos_show = pos_show.sort_values('z', ascending=False)[['Ticker', 'Direction', 'z', 'scaled_z', 'portfolio_weight']]
+    pos_show.columns = ['Ticker', 'Direction', 'Raw Signal (z)', 'Vol-Targeted Position (x)', 'Portfolio Weight (%)']
+    pos_show['Portfolio Weight (%)'] = pos_show['Portfolio Weight (%)'] * 100
+
     st.dataframe(
         pos_show.style.map(lambda x: color_dir(x), subset=['Direction'])\
-                      .format({'Raw Signal (z)': '{:.4f}', 'Target Weight (%)': '{:.2f}%'}),
+                      .format({'Raw Signal (z)': '{:.4f}', 'Vol-Targeted Position (x)': '{:.2f}',
+                               'Portfolio Weight (%)': '{:.2f}%'}),
         height=400, use_container_width=True
     )
