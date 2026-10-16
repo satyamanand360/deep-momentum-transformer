@@ -8,3 +8,5 @@ scipy
 scikit-learn
 tqdm
 jupyter
+matplotlib
+nbformat

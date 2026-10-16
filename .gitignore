@@ -16,7 +16,8 @@ venv.bak/
 # Data & Models (Do not upload large data files or weights to GitHub)
 data/
 models/
-results/
+results/*
+!results/metrics.md
 *.csv
 *.pth
 

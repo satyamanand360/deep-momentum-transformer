@@ -15,15 +15,15 @@ cells = [
     nbf.v4.new_code_cell("df_features = compute_features(df_raw)\ndf_features.to_csv('data/features.csv', index=False)\ndf_features.tail()"),
     
     nbf.v4.new_markdown_cell("## 4. Leakage-safe Train/Val/Test Split & Dataloaders"),
-    nbf.v4.new_code_cell("train_loader, val_loader, test_loader = get_dataloaders(df_features, batch_size=256)\nprint(f'Train batches: {len(train_loader)}')\nprint(f'Val batches: {len(val_loader)}')\nprint(f'Test batches: {len(test_loader)}')"),
+    nbf.v4.new_code_cell("train_loader, val_loader, test_loader = get_dataloaders(df_features)\nprint(f'Train sequences: {len(train_loader.dataset)}')\nprint(f'Validation decisions: {len(val_loader.dataset)}')\nprint(f'Test decisions: {len(test_loader.dataset)}')"),
     
     nbf.v4.new_markdown_cell("## 5 & 6. Model Architecture & Training Loop\nTraining the Decoder-Only TFT to maximize the Sharpe ratio."),
     nbf.v4.new_code_cell("# This will train the model and save the best weights to models/best_model.pth\n# Note: This might take some time depending on your hardware.\ntrain_model()"),
     
-    nbf.v4.new_markdown_cell("## 7 & 8. Backtesting & Metrics Computation\nRunning the backtest with transaction costs and calculating all requested metrics."),
+    nbf.v4.new_markdown_cell("## 7 & 8. Backtesting & Metrics Computation\nOut-of-sample backtest with 3 bps costs, ex-ante leverage to 30% vol, a TSMOM baseline and an equal-weight benchmark. Writes `results/metrics.md`."),
     nbf.v4.new_code_cell("metrics, bench_metrics, port_returns, bench_returns = run_backtest('data/features.csv', 'models/best_model.pth', cost_bps=3)"),
     
-    nbf.v4.new_markdown_cell("## 9. Dashboard\nTo view the interactive dashboard with equity curves, drawdowns, and interpretability insights, run the following command in your terminal:\n`streamlit run dashboard.py`")
+    nbf.v4.new_markdown_cell("## 9. Dashboard\nTo view the interactive dashboard with equity curves, drawdowns, rolling Sharpe and monthly returns, run the following command in your terminal:\n`python -m streamlit run dashboard.py`")
 ]
 
 nb['cells'] = cells
